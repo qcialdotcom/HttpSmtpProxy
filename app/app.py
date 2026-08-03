@@ -13,6 +13,8 @@ API Key Stored in Environment Variable
 
 ALLOWED_API_KEYS: Comma-separated list of allowed API keys
                     ex: 1st-key,2nd-key,3rd-key so on
+ALLOWED_TOKEN: Optional token type to be used in the Authorization header.
+                    ex: Bearer, Token, etc. If not provided, any token type will be accepted.
 
 Auth header expected on requests:
     Authorization: Bearer <api-key>
