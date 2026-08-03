@@ -51,3 +51,8 @@ class EmailPayload(BaseModel):
     smtp_config: SMTPConfig
     sender: EmailAddress
     messages: list[EmailMessage]
+
+class EmailResponse(BaseModel):
+    message: str
+    status: str
+    queued: int

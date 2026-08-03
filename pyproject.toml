@@ -1,11 +1,12 @@
 [project]
-name = "httpsmtpproxy"
+name = "http-smtp-proxy"
 version = "0.1.0"
-description = "Add your description here"
+description = "FastAPI SMTP proxy server.This API receives SMTP configuration and email data in a JSON request, then sends the emails using the provided SMTP server."
 readme = "README.md"
 requires-python = ">=3.14"
 dependencies = [
     "fastapi[standard]>=0.141.1",
-    "pydentic>=0.0.1.dev3",
+    "pydantic>=2.0",
     "python-dotenv>=1.2.2",
+    "uvicorn>=0.52.1",
 ]

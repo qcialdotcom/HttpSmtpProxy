@@ -31,7 +31,7 @@ from email.utils import formataddr
 from dotenv import load_dotenv
 from fastapi import BackgroundTasks, FastAPI, Header, HTTPException
 
-from .schema import EmailAddress, EmailMessage, EmailPayload, SMTPConfig
+from .schema import EmailAddress, EmailMessage, EmailPayload, EmailResponse, SMTPConfig
 
 load_dotenv()
 
@@ -190,7 +190,7 @@ async def send_emails(
     payload: EmailPayload,
     background_tasks: BackgroundTasks,
     authorization: str | None = Header(default=None),
-):
+) -> EmailResponse:
     """Send emails using the provided SMTP configuration and email data."""
 
     if not _verify_authorization(authorization):
@@ -202,4 +202,8 @@ async def send_emails(
 
     background_tasks.add_task(_send_all_messages, payload)
 
-    return {"success": True, "queued": queued}
+    return EmailResponse(
+        message=f"Queued {queued} email(s) for sending.",
+        status="success",
+        queued=queued,
+    )
