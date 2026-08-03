@@ -57,3 +57,8 @@ class EmailResponse(BaseModel):
     message: str
     status: str
     sent: int
+
+class EmailResponseAsync(BaseModel):
+    message: str
+    status: str
+    queued: int

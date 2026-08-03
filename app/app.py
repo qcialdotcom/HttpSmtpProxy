@@ -21,6 +21,7 @@ Auth header expected on requests:
     Authorization: <token_type> <api-key>   # token_type is ignored, only the key is checked
 """
 
+import asyncio
 import base64
 import logging
 import os
@@ -30,9 +31,16 @@ from email.message import EmailMessage as PyEmailMessage
 from email.utils import formataddr
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, Header, HTTPException
+from fastapi import BackgroundTasks, FastAPI, Header, HTTPException
 
-from .schema import EmailAddress, EmailMessage, EmailPayload, EmailResponse, SMTPConfig
+from .schema import (
+    EmailAddress,
+    EmailMessage,
+    EmailPayload,
+    EmailResponse,
+    EmailResponseAsync,
+    SMTPConfig,
+)
 
 load_dotenv()
 
@@ -207,6 +215,19 @@ def _send_all_messages(payload: EmailPayload) -> tuple[int, int]:
     return sent, failed
 
 
+async def _send_all_messages_async(payload: EmailPayload) -> tuple[int, int]:
+    """
+    Async wrapper for _send_all_messages to run it in a separate thread.
+
+    Returns:
+        (sent_count, failed_count)
+    """
+
+    sent, fail = await asyncio.to_thread(_send_all_messages, payload)
+
+    return sent, fail
+
+
 @app.post("/send")
 def send_emails(
     payload: EmailPayload,
@@ -237,4 +258,36 @@ def send_emails(
         message=f"{sent} email's sent successfully, {failed} failed.",
         status=status,
         sent=sent,
+    )
+
+
+@app.post("/send_async")
+async def send_emails_async(
+    payload: EmailPayload,
+    background_tasks: BackgroundTasks,
+    authorization: str | None = Header(default=None),
+) -> EmailResponseAsync:
+    """Send emails asynchronously using the provided SMTP configuration."""
+
+    if not _verify_authorization(authorization):
+        raise HTTPException(status_code=401, detail="Unauthorized request")
+
+    logger.info(
+        "Received async request to send %d email(s) from %s",
+        len(payload.messages),
+        payload.sender.email,
+    )
+
+    background_tasks.add_task(_send_all_messages_async, payload)
+
+    logger.info(
+        "Email sending initiated in the background for %d email(s) from %s",
+        len(payload.messages),
+        payload.sender.email,
+    )
+
+    return EmailResponseAsync(
+        message="Email sending initiated in the background.",
+        status="initiated",
+        queued=len(payload.messages),
     )
