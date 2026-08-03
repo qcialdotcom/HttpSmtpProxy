@@ -21,7 +21,6 @@ Auth header expected on requests:
     Authorization: <token_type> <api-key>   # token_type is ignored, only the key is checked
 """
 
-import asyncio
 import base64
 import logging
 import os
@@ -31,7 +30,7 @@ from email.message import EmailMessage as PyEmailMessage
 from email.utils import formataddr
 
 from dotenv import load_dotenv
-from fastapi import BackgroundTasks, FastAPI, Header, HTTPException
+from fastapi import FastAPI, Header, HTTPException
 
 from .schema import EmailAddress, EmailMessage, EmailPayload, EmailResponse, SMTPConfig
 
@@ -137,7 +136,7 @@ def _build_email(sender: EmailAddress, message: EmailMessage) -> PyEmailMessage:
     return email_msg
 
 
-def _send_via_smtp_sync(
+def _send_via_smtp(
     config: SMTPConfig, sender: EmailAddress, message: EmailMessage
 ) -> None:
     """Blocking SMTP send. Meant to be run in a worker thread."""
@@ -163,22 +162,14 @@ def _send_via_smtp_sync(
         smtp.sendmail(sender.email, all_recipients, email_msg.as_bytes())
 
 
-async def _send_via_smtp(
-    config: SMTPConfig, sender: EmailAddress, message: EmailMessage
-) -> None:
-    """Async wrapper around the blocking smtplib call."""
-
-    await asyncio.to_thread(_send_via_smtp_sync, config, sender, message)
-
-
-async def _send_all_messages(payload: EmailPayload) -> None:
-    """Background task: send every message in the payload, logging failures."""
+def _send_all_messages(payload: EmailPayload) -> None:
+    """Send all messages in the payload using the provided SMTP configuration and sender."""
 
     for message in payload.messages:
         if not (message.to or message.cc or message.bcc):
             continue
         try:
-            await _send_via_smtp(payload.smtp_config, payload.sender, message)
+            _send_via_smtp(payload.smtp_config, payload.sender, message)
         except Exception:
             logger.exception(
                 "Failed to send email with subject=%r to=%r",
@@ -188,9 +179,8 @@ async def _send_all_messages(payload: EmailPayload) -> None:
 
 
 @app.post("/send")
-async def send_emails(
+def send_emails(
     payload: EmailPayload,
-    background_tasks: BackgroundTasks,
     authorization: str | None = Header(default=None),
 ) -> EmailResponse:
     """Send emails using the provided SMTP configuration and email data."""
@@ -198,14 +188,14 @@ async def send_emails(
     if not _verify_authorization(authorization):
         raise HTTPException(status_code=401, detail="Unauthorized request")
 
-    queued = sum(
+    count = sum(
         1 for message in payload.messages if (message.to or message.cc or message.bcc)
     )
 
-    background_tasks.add_task(_send_all_messages, payload)
+    _send_all_messages(payload)
 
     return EmailResponse(
-        message=f"Queued {queued} email(s) for sending.",
+        message=f"Count {count} email's sent successfully.",
         status="success",
-        queued=queued,
+        sent=count,
     )

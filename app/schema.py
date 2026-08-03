@@ -52,7 +52,8 @@ class EmailPayload(BaseModel):
     sender: EmailAddress
     messages: list[EmailMessage]
 
+
 class EmailResponse(BaseModel):
     message: str
     status: str
-    queued: int
+    sent: int
