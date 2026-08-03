@@ -137,9 +137,11 @@ def _build_email(sender: EmailAddress, message: EmailMessage) -> PyEmailMessage:
 
 
 def _send_via_smtp(
-    config: SMTPConfig, sender: EmailAddress, message: EmailMessage
+    config: SMTPConfig,
+    sender: EmailAddress,
+    message: EmailMessage,
 ) -> None:
-    """Blocking SMTP send. Meant to be run in a worker thread."""
+    """Send a single email using the provided SMTP configuration."""
 
     email_msg = _build_email(sender, message)
     all_recipients = [addr.email for addr in message.to + message.cc + message.bcc]
@@ -151,31 +153,58 @@ def _send_via_smtp(
         connection_kwargs["timeout"] = config.timeout
 
     if config.use_ssl:
-        context = ssl.create_default_context()
-        connection_kwargs["context"] = context
+        connection_kwargs["context"] = ssl.create_default_context()
 
     with connection_cls(config.host, config.port, **connection_kwargs) as smtp:
+        smtp.ehlo()
+
         if not config.use_ssl and config.use_tls:
             smtp.starttls(context=ssl.create_default_context())
-        if config.username and config.password:
+            smtp.ehlo()
+
+        if config.username and config.password and smtp.has_extn("auth"):
             smtp.login(config.username, config.password)
-        smtp.sendmail(sender.email, all_recipients, email_msg.as_bytes())
+
+        smtp.send_message(
+            email_msg,
+            from_addr=sender.email,
+            to_addrs=all_recipients,
+        )
 
 
-def _send_all_messages(payload: EmailPayload) -> None:
-    """Send all messages in the payload using the provided SMTP configuration and sender."""
+def _send_all_messages(payload: EmailPayload) -> tuple[int, int]:
+    """
+    Send all messages.
+
+    Returns:
+        (sent_count, failed_count)
+    """
+
+    sent = 0
+    failed = 0
 
     for message in payload.messages:
         if not (message.to or message.cc or message.bcc):
             continue
+
         try:
-            _send_via_smtp(payload.smtp_config, payload.sender, message)
+            _send_via_smtp(
+                payload.smtp_config,
+                payload.sender,
+                message,
+            )
+            sent += 1
+
         except Exception:
+            failed += 1
+
             logger.exception(
                 "Failed to send email with subject=%r to=%r",
                 message.subject,
                 [addr.email for addr in message.to],
             )
+
+    return sent, failed
 
 
 @app.post("/send")
@@ -183,19 +212,29 @@ def send_emails(
     payload: EmailPayload,
     authorization: str | None = Header(default=None),
 ) -> EmailResponse:
-    """Send emails using the provided SMTP configuration and email data."""
+    """Send emails using the provided SMTP configuration."""
 
     if not _verify_authorization(authorization):
         raise HTTPException(status_code=401, detail="Unauthorized request")
 
-    count = sum(
-        1 for message in payload.messages if (message.to or message.cc or message.bcc)
+    logger.info(
+        "Received request to send %d email(s) from %s",
+        len(payload.messages),
+        payload.sender.email,
     )
 
-    _send_all_messages(payload)
+    sent, failed = _send_all_messages(payload)
+
+    status = "success" if failed == 0 else "partial_success"
+
+    logger.info(
+        "Email sending completed: %d sent, %d failed",
+        sent,
+        failed,
+    )
 
     return EmailResponse(
-        message=f"Count {count} email's sent successfully.",
-        status="success",
-        sent=count,
+        message=f"{sent} email's sent successfully, {failed} failed.",
+        status=status,
+        sent=sent,
     )
