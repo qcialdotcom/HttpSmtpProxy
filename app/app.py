@@ -19,6 +19,9 @@ ALLOWED_TOKEN: Optional token type to be used in the Authorization header.
 Auth header expected on requests:
     Authorization: Bearer <api-key>
     Authorization: <token_type> <api-key>   # token_type is ignored, only the key is checked
+
+Note: It is just a simple SMTP proxy server for sending emails. If it is not working the please check the 
+data you are sending in the request. It should be in the correct format as defined in the schema.py file.
 """
 
 import asyncio
