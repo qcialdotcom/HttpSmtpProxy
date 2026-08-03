@@ -231,12 +231,14 @@ source = { virtual = "." }
 dependencies = [
     { name = "fastapi", extra = ["standard"] },
     { name = "pydentic" },
+    { name = "python-dotenv" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "fastapi", extras = ["standard"], specifier = ">=0.141.1" },
     { name = "pydentic", specifier = ">=0.0.1.dev3" },
+    { name = "python-dotenv", specifier = ">=1.2.2" },
 ]
 
 [[package]]
